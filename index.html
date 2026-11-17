@@ -1,0 +1,1529 @@
+```html
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>مساعد المكفوفين الذكي - كاشف المجسمات والمسافة</title>
+
+  <!-- خطوط عربية وإنجليزية واضحة وعالية التباين -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@700;800;900&family=Inter:wght@700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- TensorFlow.js & COCO-SSD للتعرف الفوري على المجسمات داخل المتصفح -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+
+  <style>
+    /* ============================================================================
+       نظام السمات والتباين البصري لإمكانية الوصول
+       ============================================================================ */
+    :root {
+      --bg-primary: #000000;
+      --bg-secondary: #111111;
+      --bg-card: rgba(0, 0, 0, 0.93);
+      --text-primary: #FFFFFF;
+      --text-secondary: #FDE047;
+      --text-accent: #FFD700;
+      --border-accent: #FFD700;
+      --btn-bg: #FFD700;
+      --btn-text: #000000;
+      --font-scale: 1;
+    }
+
+    body.theme-hc-yellow {
+      --bg-primary: #000000;
+      --bg-secondary: #121212;
+      --bg-card: rgba(0, 0, 0, 0.94);
+      --text-primary: #FFFFFF;
+      --text-secondary: #FDE047;
+      --text-accent: #FFD700;
+      --border-accent: #FFD700;
+      --btn-bg: #FFD700;
+      --btn-text: #000000;
+    }
+
+    body.theme-hc-blue {
+      --bg-primary: #001833;
+      --bg-secondary: #00264D;
+      --bg-card: rgba(0, 24, 51, 0.95);
+      --text-primary: #FFFFFF;
+      --text-secondary: #BAE6FD;
+      --text-accent: #7DD3FC;
+      --border-accent: #FFFFFF;
+      --btn-bg: #FFFFFF;
+      --btn-text: #001833;
+    }
+
+    body.theme-radar-green {
+      --bg-primary: #020D06;
+      --bg-secondary: #061F10;
+      --bg-card: rgba(2, 13, 6, 0.95);
+      --text-primary: #ECFDF5;
+      --text-secondary: #6EE7B7;
+      --text-accent: #10B981;
+      --border-accent: #10B981;
+      --btn-bg: #10B981;
+      --btn-text: #020D06;
+    }
+
+    body.theme-light {
+      --bg-primary: #F8FAFC;
+      --bg-secondary: #E2E8F0;
+      --bg-card: rgba(255, 255, 255, 0.96);
+      --text-primary: #09090B;
+      --text-secondary: #334155;
+      --text-accent: #1D4ED8;
+      --border-accent: #09090B;
+      --btn-bg: #09090B;
+      --btn-text: #FFFFFF;
+    }
+
+    html {
+      font-size: calc(16px * var(--font-scale));
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Cairo', 'Inter', sans-serif;
+      overscroll-behavior: none;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .app-bg-primary { background-color: var(--bg-primary); }
+    .app-bg-secondary { background-color: var(--bg-secondary); }
+    .app-bg-card { background-color: var(--bg-card); }
+    .app-text-primary { color: var(--text-primary); }
+    .app-text-secondary { color: var(--text-secondary); }
+    .app-text-accent { color: var(--text-accent); }
+    .app-border-accent { border-color: var(--border-accent); }
+    .app-btn-primary {
+      background-color: var(--btn-bg);
+      color: var(--btn-text);
+    }
+
+    @keyframes dangerPulse {
+      0%, 100% { box-shadow: inset 0 0 0 8px #EF4444; }
+      50% { box-shadow: inset 0 0 0 20px var(--border-accent); }
+    }
+    .danger-zone-active {
+      animation: dangerPulse 0.6s infinite;
+    }
+
+    @keyframes micPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); }
+      50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+    }
+    .mic-active-state {
+      background-color: #DC2626 !important;
+      color: #FFFFFF !important;
+      border-color: #FFFFFF !important;
+      animation: micPulse 1.2s infinite;
+    }
+
+    button:focus-visible, input:focus-visible {
+      outline: 4px solid var(--border-accent);
+      outline-offset: 3px;
+    }
+  </style>
+</head>
+<body class="theme-hc-yellow min-h-screen flex flex-col justify-between select-none overflow-x-hidden">
+
+  <!-- ============================================================================
+       الشريط العلوي: العنوان، بيانات الطالب والمدرسة، وأزرار اللغة والإعدادات
+       ============================================================================ -->
+  <header class="w-full app-bg-secondary border-b-4 app-border-accent px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 z-30">
+    <div>
+      <h1 id="ui-app-title" class="text-lg sm:text-xl font-black app-text-accent leading-tight">
+        مساعد المكفوفين الذكي
+      </h1>
+      <p id="ui-student-credit" class="text-xs sm:text-sm font-extrabold app-text-secondary">
+        تم إعداد الطالب: عصام الشتيات | المدرسة: مدرسة ابن خفاجة
+      </p>
+      <p id="system-status-text" class="text-xs sm:text-sm font-bold app-text-primary" aria-live="polite">
+        جاري تحميل الذكاء الاصطناعي...
+      </p>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <!-- زر تبديل اللغة الفوري (عربي / English) -->
+      <button
+        id="btn-quick-lang"
+        type="button"
+        class="app-bg-primary border-2 app-border-accent app-text-accent font-black px-3 py-2 rounded-xl text-xs sm:text-sm active:scale-95 transition">
+        English
+      </button>
+
+      <!-- زر الإعدادات وإمكانية الوصول -->
+      <button
+        id="btn-open-settings"
+        type="button"
+        class="app-btn-primary font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 active:scale-95 transition">
+        <span>⚙️</span>
+        <span id="ui-btn-settings">الإعدادات</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ============================================================================
+       منطقة الكاميرا والرادار التفاعلي
+       ============================================================================ -->
+  <main class="relative flex-1 flex flex-col items-center justify-center w-full overflow-hidden app-bg-primary">
+    <div
+      id="camera-touch-area"
+      role="button"
+      tabindex="0"
+      aria-label="منطقة الكاميرا. اضغط في أي مكان لسماع اسم المجسم والمسافة فوراً"
+      class="relative w-full h-full flex-1 flex items-center justify-center cursor-pointer overflow-hidden">
+
+      <!-- بث الكاميرا الخلفية -->
+      <video
+        id="camera-video"
+        class="w-full h-full object-cover hidden"
+        playsinline
+        muted
+        autoplay
+        aria-hidden="true"></video>
+
+      <!-- طبقة رسم الإطارات والرادار -->
+      <canvas
+        id="detection-canvas"
+        class="absolute inset-0 w-full h-full pointer-events-none hidden"
+        aria-hidden="true"></canvas>
+
+      <!-- شاشة البداية الضخمة لتشغيل الكاميرا والصوت بلمسة واحدة -->
+      <div id="placeholder-screen" class="flex flex-col items-center justify-center text-center p-5 max-w-lg z-10 mt-36 sm:mt-32">
+        <button
+          id="btn-center-launch"
+          type="button"
+          class="w-32 h-32 sm:w-36 sm:h-36 rounded-full app-btn-primary border-4 app-border-accent flex flex-col items-center justify-center mb-4 shadow-2xl active:scale-95 transition">
+          <svg class="w-14 h-14 sm:w-16 sm:h-16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          <span id="ui-center-tap" class="text-sm sm:text-base font-black mt-1">ابدأ الآن</span>
+        </button>
+
+        <h2 id="ui-placeholder-title" class="text-xl sm:text-2xl font-black app-text-accent mb-2">
+          اضغط لتشغيل الكاميرا والصوت
+        </h2>
+        <p id="ui-placeholder-desc" class="text-sm sm:text-base font-bold app-text-primary leading-relaxed">
+          وجّه الكاميرا الخلفية أمامك، وسينطق الهاتف تلقائياً اسم أي مجسم يظهر أمامك والمسافة المتبقية (مثل: أمامك كرسي، ضايل متر) مع زمور إنذار يتسارع عند الاقتراب.
+        </p>
+      </div>
+
+      <!-- بطاقة النتيجة الحية العلوية (المجسم + المسافة لفظاً + شريط القرب) -->
+      <div
+        id="live-result-banner"
+        aria-live="assertive"
+        aria-atomic="true"
+        class="absolute top-2.5 inset-x-2.5 sm:inset-x-5 app-bg-card border-4 app-border-accent rounded-2xl p-3 sm:p-4 shadow-2xl z-20">
+        
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+          <div class="sm:col-span-6">
+            <span id="ui-label-object" class="text-xs font-extrabold app-text-accent block">
+              المجسم الظاهر أمامك:
+            </span>
+            <p id="detected-object-name" class="text-xl sm:text-3xl font-black app-text-primary mt-0.5 leading-tight">
+              بانتظار تشغيل الكاميرا...
+            </p>
+          </div>
+
+          <div class="sm:col-span-6 sm:text-left border-t-2 sm:border-t-0 border-gray-600/40 pt-1.5 sm:pt-0">
+            <span id="ui-label-distance" class="text-xs font-extrabold app-text-accent block">
+              المسافة المتبقية:
+            </span>
+            <p id="detected-distance-text" class="text-lg sm:text-2xl font-black app-text-accent mt-0.5 leading-tight">
+              --
+            </p>
+          </div>
+        </div>
+
+        <!-- شريط مقياس القرب -->
+        <div class="mt-2.5 w-full h-3.5 bg-gray-800 rounded-full overflow-hidden border border-gray-600 p-0.5">
+          <div id="proximity-gauge-fill" class="h-full rounded-full transition-all duration-150 bg-green-500" style="width: 10%;"></div>
+        </div>
+
+        <!-- تحذير الاصطدام الصريح عند نصف متر -->
+        <div
+          id="proximity-warning-badge"
+          class="hidden mt-2.5 bg-red-600 text-white font-black text-center py-2 px-3 rounded-xl text-sm sm:text-lg shadow-lg">
+          🚨 تحذير! ضايل نص متر وتصطدم بالمجسم!
+        </div>
+      </div>
+
+      <!-- شريط حالة الميكروفون وآخر جملة منطوقة -->
+      <div class="absolute bottom-2.5 inset-x-2.5 sm:inset-x-5 flex flex-col gap-1.5 pointer-events-none z-20">
+        <div
+          id="mic-live-caption"
+          class="hidden app-bg-card border-2 border-red-500 rounded-xl px-3.5 py-2 flex items-center justify-between text-xs sm:text-sm font-bold shadow-lg">
+          <span id="ui-mic-listening-text" class="text-red-400">🎤 المايك يستمع لأوامرك...</span>
+          <span id="mic-heard-words" class="app-text-accent font-black truncate max-w-[55%]"></span>
+        </div>
+
+        <div
+          id="speech-live-caption"
+          class="app-bg-card border-2 app-border-accent rounded-xl px-3.5 py-1.5 flex items-center justify-between text-xs sm:text-sm font-bold shadow">
+          <span id="ui-spoken-prefix" class="app-text-accent shrink-0 ml-2">🔊 المساعد:</span>
+          <span id="last-spoken-caption" class="app-text-primary truncate flex-1">جاهز للتشغيل</span>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ============================================================================
+       لوحة الأزرار السفلية الضخمة
+       ============================================================================ -->
+  <footer class="w-full app-bg-secondary border-t-4 app-border-accent p-2.5 sm:p-3.5 z-30">
+    <div class="max-w-5xl mx-auto grid grid-cols-3 gap-2 sm:gap-3">
+      
+      <!-- 1. زر تشغيل / إيقاف الكاميرا والصوت -->
+      <button
+        id="btn-toggle-assistant"
+        type="button"
+        disabled
+        class="col-span-1 min-h-[70px] sm:min-h-[78px] app-btn-primary disabled:opacity-50 font-black text-sm sm:text-xl rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2.5 px-2 py-2.5 active:scale-95 transition">
+        <svg id="icon-play" class="w-6 h-6 sm:w-7 sm:h-7 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        <svg id="icon-stop" class="w-6 h-6 sm:w-7 sm:h-7 shrink-0 hidden" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <rect x="6" y="6" width="12" height="12" rx="2"/>
+        </svg>
+        <span id="btn-toggle-text" class="text-center leading-tight">جاري التجهيز...</span>
+      </button>
+
+      <!-- 2. زر تفعيل الميكروفون للأوامر الصوتية -->
+      <button
+        id="btn-toggle-mic"
+        type="button"
+        aria-pressed="false"
+        class="col-span-1 min-h-[70px] sm:min-h-[78px] app-bg-primary border-4 app-border-accent app-text-accent font-black text-sm sm:text-xl rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2.5 px-2 py-2.5 active:scale-95 transition">
+        <svg class="w-6 h-6 sm:w-7 sm:h-7 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" x2="12" y1="19" y2="22"/>
+        </svg>
+        <span id="btn-mic-text" class="text-center leading-tight">تشغيل المايك</span>
+      </button>
+
+      <!-- 3. زر النطق الفوري (ايش قدامي؟) -->
+      <button
+        id="btn-describe-now"
+        type="button"
+        class="col-span-1 min-h-[70px] sm:min-h-[78px] app-bg-primary border-4 app-border-accent app-text-accent font-black text-sm sm:text-xl rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2.5 px-2 py-2.5 active:scale-95 transition">
+        <svg class="w-6 h-6 sm:w-7 sm:h-7 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+        </svg>
+        <span id="btn-describe-text" class="text-center leading-tight">ايش قدامي؟</span>
+      </button>
+
+    </div>
+  </footer>
+
+  <!-- ============================================================================
+       لوحة الإعدادات التفاعلية وإمكانية الوصول
+       ============================================================================ -->
+  <div
+    id="settings-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="settings-modal-title"
+    class="hidden fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+    <div class="app-bg-secondary border-4 app-border-accent rounded-3xl max-w-xl w-full p-4 sm:p-6 shadow-2xl my-auto max-h-[92vh] overflow-y-auto">
+      
+      <div class="flex items-center justify-between border-b-2 border-gray-600 pb-3 mb-4">
+        <h2 id="settings-modal-title" class="text-xl sm:text-2xl font-black app-text-accent">
+          ⚙️ إعدادات إمكانية الوصول
+        </h2>
+        <button
+          id="btn-close-settings-top"
+          type="button"
+          aria-label="إغلاق الإعدادات"
+          class="app-bg-primary border-2 app-border-accent app-text-accent font-black px-3.5 py-2 rounded-xl text-base active:scale-95">
+          ✕
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <!-- 1. اللغة -->
+        <div class="app-bg-primary border-2 app-border-accent rounded-2xl p-3.5">
+          <label id="ui-set-lang-label" class="block text-base sm:text-lg font-black app-text-accent mb-2">
+            1. لغة التطبيق وأسماء المجسمات:
+          </label>
+          <div class="grid grid-cols-2 gap-2.5">
+            <button id="btn-set-ar" type="button" class="min-h-[52px] rounded-xl border-4 font-black text-base transition active:scale-95">
+              🇸🇦 العربية (كرسي / طاولة)
+            </button>
+            <button id="btn-set-en" type="button" class="min-h-[52px] rounded-xl border-4 font-black text-base transition active:scale-95">
+              🇬🇧 English (Chair / Table)
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. ألوان الصفحة والتباين -->
+        <div class="app-bg-primary border-2 app-border-accent rounded-2xl p-3.5">
+          <label id="ui-set-theme-label" class="block text-base sm:text-lg font-black app-text-accent mb-2">
+            2. ألوان الصفحة والتباين البصري:
+          </label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button type="button" data-theme="theme-hc-yellow" class="theme-option-btn min-h-[48px] bg-black text-yellow-400 border-4 border-yellow-400 rounded-xl font-black text-sm px-3 text-right">
+              ● تباين عالي (أسود / أصفر)
+            </button>
+            <button type="button" data-theme="theme-hc-blue" class="theme-option-btn min-h-[48px] bg-[#001833] text-white border-4 border-white rounded-xl font-black text-sm px-3 text-right">
+              ● تباين أزرق (أزرق / أبيض)
+            </button>
+            <button type="button" data-theme="theme-radar-green" class="theme-option-btn min-h-[48px] bg-[#020D06] text-emerald-400 border-4 border-emerald-400 rounded-xl font-black text-sm px-3 text-right">
+              ● رادار ليلي (أسود / أخضر)
+            </button>
+            <button type="button" data-theme="theme-light" class="theme-option-btn min-h-[48px] bg-slate-100 text-slate-900 border-4 border-slate-900 rounded-xl font-black text-sm px-3 text-right">
+              ● وضع نهاري عالي الوضوح
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. حجم الخط -->
+        <div class="app-bg-primary border-2 app-border-accent rounded-2xl p-3.5">
+          <div class="flex items-center justify-between mb-2">
+            <label for="slider-font-scale" id="ui-set-font-label" class="text-base font-black app-text-accent">
+              3. حجم الخط:
+            </label>
+            <span id="val-font-scale" class="text-base font-black app-text-primary">100%</span>
+          </div>
+          <input id="slider-font-scale" type="range" min="0.9" max="1.35" step="0.05" value="1.0" class="w-full h-4 accent-yellow-400 cursor-pointer" />
+        </div>
+
+        <!-- 4. سرعة النطق الصوتي -->
+        <div class="app-bg-primary border-2 app-border-accent rounded-2xl p-3.5">
+          <div class="flex items-center justify-between mb-2">
+            <label for="slider-speech-rate" id="ui-set-rate-label" class="text-base font-black app-text-accent">
+              4. سرعة النطق الصوتي:
+            </label>
+            <span id="val-speech-rate" class="text-base font-black app-text-primary">1.0x</span>
+          </div>
+          <input id="slider-speech-rate" type="range" min="0.7" max="1.5" step="0.1" value="1.0" class="w-full h-4 accent-yellow-400 cursor-pointer" />
+        </div>
+
+        <!-- 5. مسافة بدء الإنذار الشديد -->
+        <div class="app-bg-primary border-2 app-border-accent rounded-2xl p-3.5">
+          <div class="flex items-center justify-between mb-2">
+            <label for="slider-alarm-dist" id="ui-set-alarm-label" class="text-base font-black app-text-accent">
+              5. مسافة الإنذار الشديد:
+            </label>
+            <span id="val-alarm-dist" class="text-base font-black app-text-primary">0.55 م</span>
+          </div>
+          <input id="slider-alarm-dist" type="range" min="0.4" max="1.5" step="0.05" value="0.55" class="w-full h-4 accent-yellow-400 cursor-pointer" />
+        </div>
+
+        <!-- بطاقة إعداد الطالب والمدرسة -->
+        <div class="app-bg-primary border-2 app-border-accent rounded-2xl p-3.5 text-center">
+          <p id="ui-credit-card-title" class="text-sm font-black app-text-accent">بيانات الإعداد</p>
+          <p id="ui-credit-card-student" class="text-base font-black app-text-primary mt-1">تم إعداد الطالب: عصام الشتيات</p>
+          <p id="ui-credit-card-school" class="text-sm font-bold app-text-secondary">المدرسة: مدرسة ابن خفاجة</p>
+        </div>
+      </div>
+
+      <div class="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <button
+          id="btn-test-alarm"
+          type="button"
+          class="min-h-[54px] bg-red-600 text-white border-2 border-white font-black text-sm rounded-2xl active:scale-95 transition">
+          🚨 اختبار الزمور والصوت
+        </button>
+        <button
+          id="btn-sim-approach"
+          type="button"
+          class="min-h-[54px] app-bg-primary border-2 app-border-accent app-text-accent font-black text-sm rounded-2xl active:scale-95 transition">
+          📡 محاكاة اقتراب
+        </button>
+        <button
+          id="btn-close-settings-bottom"
+          type="button"
+          class="min-h-[54px] app-btn-primary font-black text-sm rounded-2xl active:scale-95 transition">
+          ✓ حفظ والعودة
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة التنبيهات -->
+<!-- ... existing ... -->
+  <script>
+    /**
+     * ============================================================================
+     * 1. قاموس ترجمة 80 مجسماً (عربي / إنجليزي) مع الارتفاع الحقيقي لتقدير المسافة
+     * ============================================================================
+     */
+    const OBJECT_DICTIONARY = {
+      "person": { ar: "شخص", en: "Person", heightM: 1.70 },
+      "bicycle": { ar: "دراجة هوائية", en: "Bicycle", heightM: 1.05 },
+      "car": { ar: "سيارة", en: "Car", heightM: 1.50 },
+      "motorcycle": { ar: "دراجة نارية", en: "Motorcycle", heightM: 1.15 },
+      "airplane": { ar: "طائرة", en: "Airplane", heightM: 5.00 },
+      "bus": { ar: "حافلة", en: "Bus", heightM: 3.10 },
+      "train": { ar: "قطار", en: "Train", heightM: 3.80 },
+      "truck": { ar: "شاحنة", en: "Truck", heightM: 2.80 },
+      "boat": { ar: "قارب", en: "Boat", heightM: 1.50 },
+      "traffic light": { ar: "إشارة مرور", en: "Traffic light", heightM: 0.80 },
+      "fire hydrant": { ar: "أسطوانة", en: "Cylinder", heightM: 0.65 },
+      "stop sign": { ar: "إشارة قف", en: "Stop sign", heightM: 0.75 },
+      "parking meter": { ar: "عمود", en: "Pole", heightM: 1.20 },
+      "bench": { ar: "مقعد", en: "Bench", heightM: 0.85 },
+      "bird": { ar: "طائر", en: "Bird", heightM: 0.20 },
+      "cat": { ar: "قطة", en: "Cat", heightM: 0.28 },
+      "dog": { ar: "كلب", en: "Dog", heightM: 0.50 },
+      "horse": { ar: "حصان", en: "Horse", heightM: 1.60 },
+      "sheep": { ar: "خروف", en: "Sheep", heightM: 0.75 },
+      "cow": { ar: "بقرة", en: "Cow", heightM: 1.40 },
+      "elephant": { ar: "فيل", en: "Elephant", heightM: 3.00 },
+      "bear": { ar: "دب", en: "Bear", heightM: 1.50 },
+      "zebra": { ar: "حمار وحشي", en: "Zebra", heightM: 1.35 },
+      "giraffe": { ar: "زرافة", en: "Giraffe", heightM: 4.80 },
+      "backpack": { ar: "حقيبة ظهر", en: "Backpack", heightM: 0.45 },
+      "umbrella": { ar: "مظلة", en: "Umbrella", heightM: 0.85 },
+      "handbag": { ar: "حقيبة يد", en: "Handbag", heightM: 0.30 },
+      "tie": { ar: "ربطة عنق", en: "Tie", heightM: 0.45 },
+      "suitcase": { ar: "حقيبة سفر", en: "Suitcase", heightM: 0.65 },
+      "frisbee": { ar: "قرص", en: "Disc", heightM: 0.25 },
+      "skis": { ar: "زلاجات", en: "Skis", heightM: 1.60 },
+      "snowboard": { ar: "لوح تزلج", en: "Snowboard", heightM: 1.50 },
+      "sports ball": { ar: "كرة", en: "Ball", heightM: 0.22 },
+      "kite": { ar: "طائرة ورقية", en: "Kite", heightM: 0.70 },
+      "baseball bat": { ar: "عصا", en: "Stick", heightM: 0.85 },
+      "baseball glove": { ar: "قفاز", en: "Glove", heightM: 0.28 },
+      "skateboard": { ar: "لوح بعجلات", en: "Skateboard", heightM: 0.20 },
+      "surfboard": { ar: "لوح", en: "Board", heightM: 1.80 },
+      "tennis racket": { ar: "مضرب", en: "Racket", heightM: 0.68 },
+      "bottle": { ar: "زجاجة أو أسطوانة", en: "Bottle or cylinder", heightM: 0.45 },
+      "wine glass": { ar: "كأس", en: "Glass", heightM: 0.20 },
+      "cup": { ar: "كوب", en: "Cup", heightM: 0.14 },
+      "fork": { ar: "شوكة", en: "Fork", heightM: 0.18 },
+      "knife": { ar: "سكين", en: "Knife", heightM: 0.22 },
+      "spoon": { ar: "ملعقة", en: "Spoon", heightM: 0.17 },
+      "bowl": { ar: "وعاء", en: "Bowl", heightM: 0.15 },
+      "banana": { ar: "موزة", en: "Banana", heightM: 0.18 },
+      "apple": { ar: "تفاحة", en: "Apple", heightM: 0.09 },
+      "sandwich": { ar: "شطيرة", en: "Sandwich", heightM: 0.10 },
+      "orange": { ar: "برتقالة", en: "Orange", heightM: 0.09 },
+      "broccoli": { ar: "خضار", en: "Vegetable", heightM: 0.15 },
+      "carrot": { ar: "جزرة", en: "Carrot", heightM: 0.18 },
+      "hot dog": { ar: "طعام", en: "Food", heightM: 0.15 },
+      "pizza": { ar: "بيتزا", en: "Pizza", heightM: 0.30 },
+      "donut": { ar: "كعكة", en: "Donut", heightM: 0.10 },
+      "cake": { ar: "كعكة", en: "Cake", heightM: 0.15 },
+      "chair": { ar: "كرسي", en: "Chair", heightM: 0.85 },
+      "couch": { ar: "كنبة", en: "Couch", heightM: 0.85 },
+      "potted plant": { ar: "نبتة", en: "Plant", heightM: 0.50 },
+      "bed": { ar: "سرير", en: "Bed", heightM: 0.65 },
+      "dining table": { ar: "طاولة", en: "Table", heightM: 0.76 },
+      "toilet": { ar: "مرحاض", en: "Toilet", heightM: 0.75 },
+      "tv": { ar: "شاشة أو شباك", en: "Screen or window", heightM: 0.85 },
+      "laptop": { ar: "لابتوب", en: "Laptop", heightM: 0.30 },
+      "mouse": { ar: "فأرة", en: "Mouse", heightM: 0.06 },
+      "remote": { ar: "جهاز تحكم", en: "Remote", heightM: 0.18 },
+      "keyboard": { ar: "لوحة مفاتيح", en: "Keyboard", heightM: 0.15 },
+      "cell phone": { ar: "هاتف", en: "Phone", heightM: 0.15 },
+      "microwave": { ar: "ميكروويف أو صندوق", en: "Box", heightM: 0.35 },
+      "oven": { ar: "فرن", en: "Oven", heightM: 0.85 },
+      "toaster": { ar: "جهاز", en: "Device", heightM: 0.22 },
+      "sink": { ar: "مغسلة", en: "Sink", heightM: 0.85 },
+      "refrigerator": { ar: "ثلاجة أو باب", en: "Door or fridge", heightM: 1.75 },
+      "book": { ar: "كتاب", en: "Book", heightM: 0.25 },
+      "clock": { ar: "ساعة", en: "Clock", heightM: 0.30 },
+      "vase": { ar: "مزهرية أو أسطوانة", en: "Vase", heightM: 0.50 },
+      "scissors": { ar: "مقص", en: "Scissors", heightM: 0.18 },
+      "teddy bear": { ar: "دمية", en: "Doll", heightM: 0.35 },
+      "hair drier": { ar: "مجفف", en: "Hair drier", heightM: 0.22 },
+      "toothbrush": { ar: "فرشاة", en: "Toothbrush", heightM: 0.18 }
+    };
+
+    /**
+     * ============================================================================
+     * 2. نصوص الواجهة باللغتين
+     * ============================================================================
+     */
+    const UI_TEXT = {
+      ar: {
+        appTitle: "مساعد المكفوفين الذكي",
+        studentCredit: "تم إعداد الطالب: عصام الشتيات | المدرسة: مدرسة ابن خفاجة",
+        creditStudentLine: "تم إعداد الطالب: عصام الشتيات",
+        creditSchoolLine: "المدرسة: مدرسة ابن خفاجة",
+        statusLoading: "جاري تحميل الذكاء الاصطناعي...",
+        statusReady: "النظام جاهز - اضغط ابدأ",
+        statusRunning: "الكاميرا تعمل - ينطق المجسمات تلقائياً",
+        statusStopped: "الكاميرا متوقفة",
+        quickLang: "English",
+        btnSettings: "الإعدادات",
+        centerTap: "ابدأ الآن",
+        placeholderTitle: "اضغط لتشغيل الكاميرا والصوت",
+        placeholderDesc: "وجّه الكاميرا الخلفية أمامك، وسينطق الهاتف تلقائياً اسم أي مجسم يظهر أمامك والمسافة المتبقية (مثل: أمامك كرسي، ضايل متر) مع زمور إنذار يتسارع عند الاقتراب.",
+        labelObject: "المجسم الظاهر أمامك:",
+        labelDistance: "المسافة المتبقية:",
+        waitingCamera: "بانتظار تشغيل الكاميرا...",
+        scanning: "جاري المسح...",
+        noObject: "لا يوجد مجسم محدد",
+        pathClear: "المسار واضح",
+        micListening: "🎤 المايك يستمع لأوامرك...",
+        spokenPrefix: "🔊 المساعد:",
+        btnStart: "تشغيل الكاميرا",
+        btnStop: "إيقاف الكاميرا",
+        btnMicStart: "تشغيل المايك",
+        btnMicStop: "المايك يعمل",
+        btnDescribe: "ايش قدامي؟",
+        settingsTitle: "⚙️ إعدادات إمكانية الوصول",
+        setLangLabel: "1. لغة التطبيق وأسماء المجسمات:",
+        setThemeLabel: "2. ألوان الصفحة والتباين البصري:",
+        setFontLabel: "3. حجم الخط:",
+        setRateLabel: "4. سرعة النطق الصوتي:",
+        setAlarmLabel: "5. مسافة الإنذار الشديد:",
+        btnTestAlarm: "🚨 اختبار الزمور والصوت",
+        btnSimApproach: "📡 محاكاة اقتراب",
+        btnSaveClose: "✓ حفظ والعودة",
+        dirAhead: "أمامك",
+        dirLeft: "على يسارك",
+        dirRight: "على يمينك",
+        genericObject: "مجسم"
+      },
+      en: {
+        appTitle: "Smart Blind Assistant",
+        studentCredit: "Prepared by Student: Essam Al-Shatiyat | School: Ibn Khafaja School",
+        creditStudentLine: "Prepared by Student: Essam Al-Shatiyat",
+        creditSchoolLine: "School: Ibn Khafaja School",
+        statusLoading: "Loading AI Model...",
+        statusReady: "System Ready - Tap Start",
+        statusRunning: "Camera Active - Speaking Automatically",
+        statusStopped: "Camera Stopped",
+        quickLang: "العربية",
+        btnSettings: "Settings",
+        centerTap: "Start Now",
+        placeholderTitle: "Tap to Start Camera & Voice",
+        placeholderDesc: "Point the rear camera ahead. The phone will automatically speak the name of any object and the remaining distance with a proximity radar alarm.",
+        labelObject: "Object Ahead:",
+        labelDistance: "Distance Remaining:",
+        waitingCamera: "Waiting to start camera...",
+        scanning: "Scanning...",
+        noObject: "No specific object detected",
+        pathClear: "Path is clear",
+        micListening: "🎤 Mic listening for commands...",
+        spokenPrefix: "🔊 Assistant:",
+        btnStart: "Start Camera",
+        btnStop: "Stop Camera",
+        btnMicStart: "Start Mic",
+        btnMicStop: "Mic Active",
+        btnDescribe: "What's Ahead?",
+        settingsTitle: "⚙️ Accessibility Settings",
+        setLangLabel: "1. App & Object Names Language:",
+        setThemeLabel: "2. Page Colors & Contrast:",
+        setFontLabel: "3. Font Size:",
+        setRateLabel: "4. Speech Rate:",
+        setAlarmLabel: "5. Critical Alarm Distance:",
+        btnTestAlarm: "🚨 Test Alarm & Voice",
+        btnSimApproach: "📡 Simulate Approach",
+        btnSaveClose: "✓ Save & Return",
+        dirAhead: "ahead",
+        dirLeft: "on your left",
+        dirRight: "on your right",
+        genericObject: "Object"
+      }
+    };
+
+    /**
+     * ============================================================================
+     * 3. حالة التطبيق والإعدادات
+     * ============================================================================
+     */
+    const settings = {
+      lang: localStorage.getItem("ba_lang") || "ar",
+      theme: localStorage.getItem("ba_theme") || "theme-hc-yellow",
+      fontScale: parseFloat(localStorage.getItem("ba_fontScale") || "1.0"),
+      speechRate: parseFloat(localStorage.getItem("ba_speechRate") || "1.0"),
+      alertThresholdM: parseFloat(localStorage.getItem("ba_alertThresholdM") || "0.55")
+    };
+
+    let aiModel = null;
+    let videoStream = null;
+    let isRunning = false;
+    let animFrameId = null;
+
+    let currentDetection = null;
+    let lastSpokenObjectKey = "";
+    let lastSpokenDistDecimeter = -1;
+    let lastSpeechTime = 0;
+
+    let audioCtx = null;
+    let radarBeepTimer = null;
+
+    let recognition = null;
+    let isMicActive = false;
+    let keepMicAlive = false;
+
+    const probeCanvas = document.createElement("canvas");
+    const probeCtx = probeCanvas.getContext("2d", { willReadFrequently: true });
+
+    // عناصر DOM
+    const videoEl = document.getElementById("camera-video");
+    const canvasEl = document.getElementById("detection-canvas");
+    const ctx = canvasEl.getContext("2d");
+    const placeholderScreen = document.getElementById("placeholder-screen");
+    const cameraTouchArea = document.getElementById("camera-touch-area");
+
+    const systemStatusText = document.getElementById("system-status-text");
+    const detectedObjectNameEl = document.getElementById("detected-object-name");
+    const detectedDistanceTextEl = document.getElementById("detected-distance-text");
+    const proximityGaugeFill = document.getElementById("proximity-gauge-fill");
+    const proximityWarningBadge = document.getElementById("proximity-warning-badge");
+    const lastSpokenCaption = document.getElementById("last-spoken-caption");
+
+    const micLiveCaption = document.getElementById("mic-live-caption");
+    const micHeardWords = document.getElementById("mic-heard-words");
+
+    const btnToggleAssistant = document.getElementById("btn-toggle-assistant");
+    const btnToggleText = document.getElementById("btn-toggle-text");
+    const iconPlay = document.getElementById("icon-play");
+    const iconStop = document.getElementById("icon-stop");
+    const btnCenterLaunch = document.getElementById("btn-center-launch");
+
+    const btnToggleMic = document.getElementById("btn-toggle-mic");
+    const btnMicText = document.getElementById("btn-mic-text");
+    const btnDescribeNow = document.getElementById("btn-describe-now");
+
+    const btnQuickLang = document.getElementById("btn-quick-lang");
+    const btnOpenSettings = document.getElementById("btn-open-settings");
+    const settingsModal = document.getElementById("settings-modal");
+
+    const alertModal = document.getElementById("alert-modal");
+    const alertModalTitle = document.getElementById("alert-modal-title");
+    const alertModalBody = document.getElementById("alert-modal-body");
+
+    /**
+     * ============================================================================
+     * 4. تهيئة الصوت والنطق التلقائي الفوري
+     * ============================================================================
+     */
+    function unlockAudio() {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+      } catch (e) {}
+
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.resume();
+      }
+    }
+
+    function speak(text, interrupt = true, overrideLang = null) {
+      lastSpokenCaption.textContent = text;
+      if (!("speechSynthesis" in window)) return;
+
+      const targetLang = overrideLang || settings.lang;
+      try {
+        if (interrupt) {
+          window.speechSynthesis.cancel();
+        }
+
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = targetLang === "ar" ? "ar-SA" : "en-US";
+        utter.rate = settings.speechRate;
+        utter.pitch = 1.0;
+        utter.volume = 1.0;
+
+        const voices = window.speechSynthesis.getVoices();
+        const codes = targetLang === "ar"
+          ? ["ar-SA", "ar-JO", "ar-AE", "ar-EG", "ar"]
+          : ["en-US", "en-GB", "en"];
+
+        let chosenVoice = null;
+        for (const c of codes) {
+          chosenVoice = voices.find(v => v.lang && v.lang.toLowerCase().includes(c.toLowerCase()));
+          if (chosenVoice) break;
+        }
+        if (chosenVoice) utter.voice = chosenVoice;
+
+        window._currentUtterance = utter;
+        window.speechSynthesis.speak(utter);
+
+        // محاولة إعادة النطق الفوري إذا بقي المحرك معلقاً بعد 350ms
+        setTimeout(() => {
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+          if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+            const retryUtter = new SpeechSynthesisUtterance(text);
+            retryUtter.lang = targetLang === "ar" ? "ar-SA" : "en-US";
+            retryUtter.rate = settings.speechRate;
+            if (chosenVoice) retryUtter.voice = chosenVoice;
+            window.speechSynthesis.speak(retryUtter);
+          }
+        }, 350);
+      } catch (e) {}
+    }
+
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    }
+
+    /**
+     * ============================================================================
+     * 5. زمور الرادار التصاعدي (يتسارع ويشتد كلما اقتربت من المجسم)
+     * ============================================================================
+     */
+    function playRadarBeep(distanceM) {
+      try {
+        unlockAudio();
+        if (!audioCtx) return;
+
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        const isDanger = distanceM <= settings.alertThresholdM;
+
+        if (isDanger) {
+          osc.type = "sawtooth";
+          osc.frequency.setValueAtTime(1200, now);
+          osc.frequency.linearRampToValueAtTime(1500, now + 0.09);
+          gain.gain.setValueAtTime(0.35, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.11);
+        } else if (distanceM <= 1.0) {
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(850, now);
+          gain.gain.setValueAtTime(0.22, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.09);
+        } else {
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(550, now);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+        }
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.12);
+
+        if (isDanger && "vibrate" in navigator) {
+          navigator.vibrate([120, 60, 120]);
+        }
+      } catch (e) {}
+    }
+
+    function startRadarBeepLoop() {
+      stopRadarBeepLoop();
+      const tick = () => {
+        if (!isRunning) return;
+        let nextDelay = 1500;
+        if (currentDetection) {
+          const d = currentDetection.distanceM;
+          playRadarBeep(d);
+          if (d <= settings.alertThresholdM) nextDelay = 180;
+          else if (d <= 0.85) nextDelay = 380;
+          else if (d <= 1.35) nextDelay = 700;
+          else nextDelay = 1150;
+        }
+        radarBeepTimer = setTimeout(tick, nextDelay);
+      };
+      radarBeepTimer = setTimeout(tick, 200);
+    }
+
+    function stopRadarBeepLoop() {
+      if (radarBeepTimer) {
+        clearTimeout(radarBeepTimer);
+        radarBeepTimer = null;
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 6. حساب المسافة وصياغتها لفظاً ("ضايل متر"، "ضايل نص متر")
+     * ============================================================================
+     */
+    function estimateDistanceMeters(bboxH, bboxW, videoH, videoW, realHeightM) {
+      if (!bboxH || bboxH <= 0 || !videoH) return 1.5;
+      const focalLengthPx = videoH * 0.85;
+      let dist = (realHeightM * focalLengthPx) / bboxH;
+
+      const hRatio = bboxH / videoH;
+      const wRatio = bboxW / videoW;
+      if (hRatio >= 0.72 || (hRatio >= 0.58 && wRatio >= 0.65)) {
+        dist = Math.min(dist, 0.5);
+      }
+
+      const clamped = Math.max(0.2, Math.min(10.0, dist));
+      return Math.round(clamped * 10) / 10;
+    }
+
+    function getSpokenDistancePhrase(meters, lang) {
+      const cm = Math.round(meters * 100);
+      if (lang === "ar") {
+        if (meters <= 0.35) return "قريب جداً، أقل من نص متر";
+        if (meters <= 0.55) return "ضايل نص متر";
+        if (meters < 0.95) return `ضايل ${cm} سنتيمتر`;
+        if (meters <= 1.15) return "ضايل متر";
+        if (meters <= 1.35) return "ضايل متر و ربع";
+        if (meters <= 1.65) return "ضايل متر و نص";
+        if (meters <= 2.15) return "ضايل مترين";
+        if (meters <= 2.65) return "ضايل مترين و نص";
+        if (meters <= 3.20) return "ضايل ثلاثة أمتار";
+        return `ضايل ${meters.toFixed(1)} متر`;
+      } else {
+        if (meters <= 0.35) return "very close, less than half a meter remaining";
+        if (meters <= 0.55) return "half a meter remaining";
+        if (meters < 0.95) return `${cm} centimeters remaining`;
+        if (meters <= 1.15) return "1 meter remaining";
+        if (meters <= 1.65) return "1 and a half meters remaining";
+        if (meters <= 2.15) return "2 meters remaining";
+        return `${meters.toFixed(1)} meters remaining`;
+      }
+    }
+
+    function getDirectionText(bboxX, bboxW, videoW, lang) {
+      const t = UI_TEXT[lang];
+      const cx = bboxX + bboxW / 2;
+      const ratio = cx / videoW;
+      if (ratio < 0.32) return t.dirLeft;
+      if (ratio > 0.68) return t.dirRight;
+      return t.dirAhead;
+    }
+
+    /**
+     * فحص وجود مجسم قريب غير مصنف (مثل جدار أو شباك) في منتصف الكاميرا
+     */
+    function checkGenericCloseObstacle(videoEl) {
+      try {
+        const size = 64;
+        probeCanvas.width = size;
+        probeCanvas.height = size;
+        const vw = videoEl.videoWidth;
+        const vh = videoEl.videoHeight;
+        probeCtx.drawImage(videoEl, vw * 0.3, vh * 0.3, vw * 0.4, vh * 0.4, 0, 0, size, size);
+        const data = probeCtx.getImageData(0, 0, size, size).data;
+
+        let edgeDiff = 0;
+        let lumSum = 0;
+        let samples = 0;
+        for (let y = 1; y < size - 1; y += 2) {
+          for (let x = 1; x < size - 1; x += 2) {
+            const i = (y * size + x) * 4;
+            const r = (y * size + x + 1) * 4;
+            const d = ((y + 1) * size + x) * 4;
+            const l = (data[i] + data[i + 1] + data[i + 2]) / 3;
+            const lr = (data[r] + data[r + 1] + data[r + 2]) / 3;
+            const ld = (data[d] + data[d + 1] + data[d + 2]) / 3;
+            edgeDiff += Math.abs(l - lr) + Math.abs(l - ld);
+            lumSum += l;
+            samples++;
+          }
+        }
+        return (edgeDiff / samples < 3.8 && lumSum / samples >= 18);
+      } catch (e) {
+        return false;
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 7. تطبيق الإعدادات وتحديث الواجهة
+     * ============================================================================
+     */
+    function applySettingsToUI() {
+      const lang = settings.lang;
+      const t = UI_TEXT[lang];
+
+      document.documentElement.lang = lang;
+      document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+
+      document.body.classList.remove("theme-hc-yellow", "theme-hc-blue", "theme-radar-green", "theme-light");
+      document.body.classList.add(settings.theme);
+
+      document.documentElement.style.setProperty("--font-scale", settings.fontScale);
+
+      document.getElementById("ui-app-title").textContent = t.appTitle;
+      document.getElementById("ui-student-credit").textContent = t.studentCredit;
+      document.getElementById("ui-credit-card-student").textContent = t.creditStudentLine;
+      document.getElementById("ui-credit-card-school").textContent = t.creditSchoolLine;
+      btnQuickLang.textContent = t.quickLang;
+      document.getElementById("ui-btn-settings").textContent = t.btnSettings;
+      document.getElementById("ui-center-tap").textContent = t.centerTap;
+      document.getElementById("ui-placeholder-title").textContent = t.placeholderTitle;
+      document.getElementById("ui-placeholder-desc").textContent = t.placeholderDesc;
+      document.getElementById("ui-label-object").textContent = t.labelObject;
+      document.getElementById("ui-label-distance").textContent = t.labelDistance;
+      document.getElementById("ui-mic-listening-text").textContent = t.micListening;
+      document.getElementById("ui-spoken-prefix").textContent = t.spokenPrefix;
+
+      btnMicText.textContent = isMicActive ? t.btnMicStop : t.btnMicStart;
+      document.getElementById("btn-describe-text").textContent = t.btnDescribe;
+
+      if (!aiModel) {
+        systemStatusText.textContent = t.statusLoading;
+      } else if (isRunning) {
+        systemStatusText.textContent = t.statusRunning;
+        btnToggleText.textContent = t.btnStop;
+      } else {
+        systemStatusText.textContent = t.statusReady;
+        btnToggleText.textContent = t.btnStart;
+        detectedObjectNameEl.textContent = t.waitingCamera;
+      }
+
+      document.getElementById("settings-modal-title").textContent = t.settingsTitle;
+      document.getElementById("ui-set-lang-label").textContent = t.setLangLabel;
+      document.getElementById("ui-set-theme-label").textContent = t.setThemeLabel;
+      document.getElementById("ui-set-font-label").textContent = t.setFontLabel;
+      document.getElementById("ui-set-rate-label").textContent = t.setRateLabel;
+      document.getElementById("ui-set-alarm-label").textContent = t.setAlarmLabel;
+      document.getElementById("btn-test-alarm").textContent = t.btnTestAlarm;
+      document.getElementById("btn-sim-approach").textContent = t.btnSimApproach;
+      document.getElementById("btn-close-settings-bottom").textContent = t.btnSaveClose;
+
+      const btnSetAr = document.getElementById("btn-set-ar");
+      const btnSetEn = document.getElementById("btn-set-en");
+      if (lang === "ar") {
+        btnSetAr.className = "min-h-[52px] rounded-xl border-4 app-btn-primary app-border-accent font-black text-base transition";
+        btnSetEn.className = "min-h-[52px] rounded-xl border-4 app-bg-secondary app-border-accent app-text-primary font-black text-base transition";
+      } else {
+        btnSetEn.className = "min-h-[52px] rounded-xl border-4 app-btn-primary app-border-accent font-black text-base transition";
+        btnSetAr.className = "min-h-[52px] rounded-xl border-4 app-bg-secondary app-border-accent app-text-primary font-black text-base transition";
+      }
+
+      document.getElementById("slider-font-scale").value = settings.fontScale;
+      document.getElementById("val-font-scale").textContent = `${Math.round(settings.fontScale * 100)}%`;
+
+      document.getElementById("slider-speech-rate").value = settings.speechRate;
+      document.getElementById("val-speech-rate").textContent = `${settings.speechRate.toFixed(1)}x`;
+
+      document.getElementById("slider-alarm-dist").value = settings.alertThresholdM;
+      document.getElementById("val-alarm-dist").textContent = `${settings.alertThresholdM.toFixed(2)} ${lang === "ar" ? "م" : "m"}`;
+
+      lastSpokenObjectKey = "";
+      lastSpokenDistDecimeter = -1;
+
+      if (recognition) {
+        recognition.lang = lang === "ar" ? "ar-JO" : "en-US";
+      }
+
+      localStorage.setItem("ba_lang", settings.lang);
+      localStorage.setItem("ba_theme", settings.theme);
+      localStorage.setItem("ba_fontScale", String(settings.fontScale));
+      localStorage.setItem("ba_speechRate", String(settings.speechRate));
+      localStorage.setItem("ba_alertThresholdM", String(settings.alertThresholdM));
+    }
+
+      document.getElementById("settings-modal-title").textContent = t.settingsTitle;
+      document.getElementById("ui-set-lang-label").textContent = t.setLangLabel;
+      document.getElementById("ui-set-theme-label").textContent = t.setThemeLabel;
+      document.getElementById("ui-set-font-label").textContent = t.setFontLabel;
+      document.getElementById("ui-set-rate-label").textContent = t.setRateLabel;
+      document.getElementById("btn-test-alarm").textContent = t.btnTestAlarm;
+      document.getElementById("btn-close-settings-bottom").textContent = t.btnSaveClose;
+
+      const btnSetAr = document.getElementById("btn-set-ar");
+      const btnSetEn = document.getElementById("btn-set-en");
+      if (lang === "ar") {
+        btnSetAr.className = "min-h-[52px] rounded-xl border-4 app-btn-primary app-border-accent font-black text-base transition";
+        btnSetEn.className = "min-h-[52px] rounded-xl border-4 app-bg-secondary app-border-accent app-text-primary font-black text-base transition";
+      } else {
+        btnSetEn.className = "min-h-[52px] rounded-xl border-4 app-btn-primary app-border-accent font-black text-base transition";
+        btnSetAr.className = "min-h-[52px] rounded-xl border-4 app-bg-secondary app-border-accent app-text-primary font-black text-base transition";
+      }
+
+      document.getElementById("slider-font-scale").value = settings.fontScale;
+      document.getElementById("val-font-scale").textContent = `${Math.round(settings.fontScale * 100)}%`;
+
+      document.getElementById("slider-speech-rate").value = settings.speechRate;
+      document.getElementById("val-speech-rate").textContent = `${settings.speechRate.toFixed(1)}x`;
+
+      lastSpokenObjectKey = "";
+      lastSpokenDistDecimeter = -1;
+
+      if (recognition) {
+        recognition.lang = lang === "ar" ? "ar-JO" : "en-US";
+      }
+
+      localStorage.setItem("ba_lang", settings.lang);
+      localStorage.setItem("ba_theme", settings.theme);
+      localStorage.setItem("ba_fontScale", String(settings.fontScale));
+      localStorage.setItem("ba_speechRate", String(settings.speechRate));
+    }
+
+    /**
+     * ============================================================================
+     * 8. تشغيل الكاميرا الخلفية وحلقة التعرف والنطق الفوري التلقائي
+     * ============================================================================
+     */
+    async function initAIModel() {
+      try {
+        systemStatusText.textContent = UI_TEXT[settings.lang].statusLoading;
+        aiModel = await cocoSsd.load({ base: "lite_mobilenet_v2" });
+        btnToggleAssistant.disabled = false;
+        applySettingsToUI();
+      } catch (err) {
+        showAlertModal(
+          settings.lang === "ar" ? "خطأ في التحميل" : "Loading Error",
+          settings.lang === "ar"
+            ? "تعذر تحميل نموذج الذكاء الاصطناعي. يرجى التأكد من الاتصال بالإنترنت وإعادة المحاولة."
+            : "Failed to load AI model. Please check your internet connection."
+        );
+      }
+    }
+
+    async function startCamera() {
+      if (isRunning || !aiModel) return;
+      unlockAudio();
+
+      const lang = settings.lang;
+      const t = UI_TEXT[lang];
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showAlertModal(
+          lang === "ar" ? "الكاميرا غير مدعومة" : "Camera Unsupported",
+          lang === "ar"
+            ? "يرجى فتح الصفحة عبر رابط آمن (HTTPS) لتشغيل الكاميرا."
+            : "Please open this page over HTTPS to access the camera."
+        );
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
+        });
+
+        videoStream = stream;
+        videoEl.srcObject = stream;
+        await new Promise((resolve) => {
+          videoEl.onloadedmetadata = () => {
+            videoEl.play();
+            resolve();
+          };
+        });
+
+        isRunning = true;
+        placeholderScreen.classList.add("hidden");
+        videoEl.classList.remove("hidden");
+        canvasEl.classList.remove("hidden");
+
+        btnToggleText.textContent = t.btnStop;
+        btnToggleAssistant.classList.add("bg-red-600", "text-white");
+        btnToggleAssistant.classList.remove("app-btn-primary");
+        iconPlay.classList.add("hidden");
+        iconStop.classList.remove("hidden");
+
+        systemStatusText.textContent = t.statusRunning;
+        detectedObjectNameEl.textContent = t.scanning;
+        detectedDistanceTextEl.textContent = "--";
+
+        lastSpokenObjectKey = "";
+        lastSpokenDistDecimeter = -1;
+        lastSpeechTime = 0;
+
+        speak(
+          lang === "ar"
+            ? "تم تشغيل الكاميرا والصوت. وجه الهاتف أمامك."
+            : "Camera and voice started. Point ahead.",
+          true
+        );
+
+        startRadarBeepLoop();
+        detectionLoop();
+      } catch (err) {
+        showAlertModal(
+          lang === "ar" ? "تعذر فتح الكاميرا" : "Camera Access Denied",
+          lang === "ar"
+            ? "يرجى السماح للمتصفح باستخدام الكاميرا الخلفية والمحاولة مرة أخرى."
+            : "Please allow rear camera permission and try again."
+        );
+      }
+    }
+
+    function stopCamera() {
+      isRunning = false;
+      stopRadarBeepLoop();
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+      if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
+      }
+
+      const lang = settings.lang;
+      const t = UI_TEXT[lang];
+
+      videoEl.srcObject = null;
+      videoEl.classList.add("hidden");
+      canvasEl.classList.add("hidden");
+      placeholderScreen.classList.remove("hidden");
+      proximityWarningBadge.classList.add("hidden");
+      cameraTouchArea.classList.remove("danger-zone-active");
+      proximityGaugeFill.style.width = "10%";
+
+      btnToggleText.textContent = t.btnStart;
+      btnToggleAssistant.classList.remove("bg-red-600", "text-white");
+      btnToggleAssistant.classList.add("app-btn-primary");
+      iconStop.classList.add("hidden");
+      iconPlay.classList.remove("hidden");
+
+      systemStatusText.textContent = t.statusStopped;
+      detectedObjectNameEl.textContent = t.waitingCamera;
+      detectedDistanceTextEl.textContent = "--";
+      currentDetection = null;
+
+      speak(lang === "ar" ? "تم إيقاف الكاميرا." : "Camera stopped.", true);
+    }
+
+    async function detectionLoop() {
+      if (!isRunning || !aiModel) return;
+
+      const lang = settings.lang;
+      const t = UI_TEXT[lang];
+
+      if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
+        const vw = videoEl.videoWidth;
+        const vh = videoEl.videoHeight;
+        if (canvasEl.width !== vw || canvasEl.height !== vh) {
+          canvasEl.width = vw;
+          canvasEl.height = vh;
+        }
+
+        const predictions = await aiModel.detect(videoEl, 6, 0.40);
+        ctx.clearRect(0, 0, vw, vh);
+
+        if (predictions.length > 0) {
+          // اختيار المجسم الأبرز والأقرب لمنتصف الكاميرا
+          predictions.sort((a, b) => {
+            const areaA = a.bbox[2] * a.bbox[3];
+            const areaB = b.bbox[2] * b.bbox[3];
+            const distCenterA = Math.abs((a.bbox[0] + a.bbox[2] / 2) - vw / 2) / vw;
+            const distCenterB = Math.abs((b.bbox[0] + b.bbox[2] / 2) - vw / 2) / vw;
+            return (areaB * (1 - distCenterB * 0.4)) - (areaA * (1 - distCenterA * 0.4));
+          });
+
+          const best = predictions[0];
+          const [bx, by, bw, bh] = best.bbox;
+          const dict = OBJECT_DICTIONARY[best.class] || { ar: t.genericObject, en: t.genericObject, heightM: 0.65 };
+          const objName = lang === "ar" ? dict.ar : dict.en;
+          const distM = estimateDistanceMeters(bh, bw, vh, vw, dict.heightM);
+          const spokenDist = getSpokenDistancePhrase(distM, lang);
+          const dirText = getDirectionText(bx, bw, vw, lang);
+          const isDanger = distM <= settings.alertThresholdM;
+
+          drawBoundingBox(bx, by, bw, bh, objName, distM, isDanger, lang);
+
+          currentDetection = {
+            key: best.class,
+            name: objName,
+            distanceM: distM,
+            spokenDistance: spokenDist,
+            direction: dirText,
+            isDanger: isDanger
+          };
+
+          updateDashboard(currentDetection, lang);
+          announceDetectionImmediately(currentDetection, lang);
+
+        } else if (checkGenericCloseObstacle(videoEl)) {
+          // إذا اقتربت الكاميرا من جسم غير معروف (مثل شباك أو حائط) ينطق "أمامك مجسم"
+          const objName = t.genericObject;
+          const spokenDist = getSpokenDistancePhrase(0.5, lang);
+          currentDetection = {
+            key: "generic_obstacle",
+            name: objName,
+            distanceM: 0.5,
+            spokenDistance: spokenDist,
+            direction: t.dirAhead,
+            isDanger: true
+          };
+          updateDashboard(currentDetection, lang);
+          announceDetectionImmediately(currentDetection, lang);
+        } else {
+          currentDetection = null;
+          detectedObjectNameEl.textContent = t.noObject;
+          detectedDistanceTextEl.textContent = t.pathClear;
+          proximityGaugeFill.style.width = "8%";
+          proximityGaugeFill.className = "h-full rounded-full transition-all duration-150 bg-green-500";
+          proximityWarningBadge.classList.add("hidden");
+          cameraTouchArea.classList.remove("danger-zone-active");
+        }
+      }
+
+      if (isRunning) {
+        animFrameId = requestAnimationFrame(detectionLoop);
+      }
+    }
+
+    function drawBoundingBox(x, y, w, h, name, distM, isDanger, lang) {
+      const color = isDanger ? "#EF4444" : (distM <= 1.1 ? "#F59E0B" : "#22C55E");
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 6;
+      ctx.strokeRect(x, y, w, h);
+
+      const label = `${name} • ${distM}${lang === "ar" ? "م" : "m"}`;
+      ctx.font = "900 22px Cairo, Inter, sans-serif";
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, Math.max(0, y - 38), tw + 22, 38);
+      ctx.fillStyle = isDanger ? "#FFFFFF" : "#000000";
+      ctx.fillText(label, x + 10, Math.max(26, y - 10));
+      ctx.restore();
+    }
+
+    function updateDashboard(det, lang) {
+      detectedObjectNameEl.textContent = `${det.direction} ${det.name}`;
+      detectedDistanceTextEl.textContent = `${det.spokenDistance} (${det.distanceM}${lang === "ar" ? "م" : "m"})`;
+
+      const closenessPct = Math.max(12, Math.min(100, Math.round((1 - Math.min(det.distanceM, 3.0) / 3.0) * 100)));
+      proximityGaugeFill.style.width = `${closenessPct}%`;
+
+      if (det.isDanger) {
+        proximityGaugeFill.className = "h-full rounded-full transition-all duration-150 bg-red-600";
+        proximityWarningBadge.textContent = lang === "ar"
+          ? `🚨 تحذير! ${det.spokenDistance} وتصطدم في ${det.name}!`
+          : `🚨 Warning! ${det.spokenDistance} before hitting ${det.name}!`;
+        proximityWarningBadge.classList.remove("hidden");
+        cameraTouchArea.classList.add("danger-zone-active");
+      } else {
+        proximityGaugeFill.className = distMColor(det.distanceM);
+        proximityWarningBadge.classList.add("hidden");
+        cameraTouchArea.classList.remove("danger-zone-active");
+      }
+    }
+
+    function distMColor(d) {
+      return d <= 1.1
+        ? "h-full rounded-full transition-all duration-150 bg-amber-400"
+        : "h-full rounded-full transition-all duration-150 bg-green-500";
+    }
+
+    /**
+     * النطق التلقائي الفوري بمجرد ظهور المجسم أو تغير المسافة بمقدار 20 سم أو الوصول لنصف متر
+     */
+    function announceDetectionImmediately(det, lang) {
+      const now = Date.now();
+      const elapsed = now - lastSpeechTime;
+      const distDecimeter = Math.round(det.distanceM * 10);
+
+      const isNewObject = det.key !== lastSpokenObjectKey;
+      const isSignificantDistanceChange = Math.abs(distDecimeter - lastSpokenDistDecimeter) >= 2;
+
+      if (det.isDanger) {
+        if (isNewObject || elapsed > 1800) {
+          const msg = lang === "ar"
+            ? `تحذير! ${det.direction} ${det.name}، ${det.spokenDistance} وتصطدم فيه!`
+            : `Warning! ${det.name} ${det.direction}, ${det.spokenDistance} before collision!`;
+          speak(msg, true);
+          lastSpokenObjectKey = det.key;
+          lastSpokenDistDecimeter = distDecimeter;
+          lastSpeechTime = now;
+        }
+        return;
+      }
+
+      if (isNewObject) {
+        const msg = lang === "ar"
+          ? `${det.direction} ${det.name}، ${det.spokenDistance}`
+          : `${det.name} ${det.direction}, ${det.spokenDistance}`;
+        speak(msg, true);
+        lastSpokenObjectKey = det.key;
+        lastSpokenDistDecimeter = distDecimeter;
+        lastSpeechTime = now;
+        return;
+      }
+
+      if ((isSignificantDistanceChange && elapsed > 1000) || elapsed > 2600) {
+        const msg = lang === "ar"
+          ? `${det.direction} ${det.name}، ${det.spokenDistance}`
+          : `${det.name} ${det.direction}, ${det.spokenDistance}`;
+        speak(msg, true);
+        lastSpokenObjectKey = det.key;
+        lastSpokenDistDecimeter = distDecimeter;
+        lastSpeechTime = now;
+      }
+    }
+
+    function speakCurrentStatusNow() {
+      unlockAudio();
+      const lang = settings.lang;
+      if (!isRunning) {
+        speak(
+          lang === "ar"
+            ? "الكاميرا متوقفة. اضغط زر تشغيل الكاميرا."
+            : "Camera is off. Tap Start Camera.",
+          true
+        );
+        return;
+      }
+      if (currentDetection) {
+        const d = currentDetection;
+        const msg = d.isDanger
+          ? (lang === "ar"
+              ? `تحذير! ${d.direction} ${d.name}، ${d.spokenDistance} وتصطدم فيه!`
+              : `Warning! ${d.name} ${d.direction}, ${d.spokenDistance}!`)
+          : (lang === "ar"
+              ? `${d.direction} ${d.name}، ${d.spokenDistance}.`
+              : `${d.name} ${d.direction}, ${d.spokenDistance}.`);
+        speak(msg, true);
+        lastSpeechTime = Date.now();
+      } else {
+        speak(
+          lang === "ar" ? "لا يوجد مجسم محدد أمامك حالياً." : "No specific object ahead.",
+          true
+        );
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 9. الميكروفون والأوامر الصوتية
+     * ============================================================================
+     */
+    function initSpeechRecognition() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        btnToggleMic.disabled = true;
+        btnToggleMic.classList.add("opacity-50");
+        return;
+      }
+
+      recognition = new SR();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = settings.lang === "ar" ? "ar-JO" : "en-US";
+
+      recognition.onstart = () => {
+        isMicActive = true;
+        btnToggleMic.setAttribute("aria-pressed", "true");
+        btnToggleMic.classList.add("mic-active-state");
+        btnMicText.textContent = UI_TEXT[settings.lang].btnMicStop;
+        micLiveCaption.classList.remove("hidden");
+      };
+
+      recognition.onresult = (event) => {
+        const last = event.results[event.results.length - 1];
+        if (last && last[0]) {
+          const text = last[0].transcript.trim();
+          micHeardWords.textContent = `"${text}"`;
+          handleVoiceCommand(text.toLowerCase());
+        }
+      };
+
+      recognition.onerror = (e) => {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          keepMicAlive = false;
+          stopMic();
+          showAlertModal(
+            settings.lang === "ar" ? "إذن الميكروفون" : "Microphone Permission",
+            settings.lang === "ar"
+              ? "يرجى السماح للمتصفح بالوصول إلى الميكروفون."
+              : "Please allow microphone permission in your browser."
+          );
+        }
+      };
+
+      recognition.onend = () => {
+        isMicActive = false;
+        btnToggleMic.classList.remove("mic-active-state");
+        btnMicText.textContent = UI_TEXT[settings.lang].btnMicStart;
+        if (keepMicAlive) {
+          try {
+            recognition.lang = settings.lang === "ar" ? "ar-JO" : "en-US";
+            recognition.start();
+          } catch (e) {}
+        } else {
+          micLiveCaption.classList.add("hidden");
+        }
+      };
+    }
+
+    function startMic() {
+      if (!recognition) initSpeechRecognition();
+      if (!recognition) return;
+
+      unlockAudio();
+      keepMicAlive = true;
+      recognition.lang = settings.lang === "ar" ? "ar-JO" : "en-US";
+      try {
+        recognition.start();
+        speak(
+          settings.lang === "ar"
+            ? "المايك شغّال. قل ابدأ، أو ايش قدامي، أو إنجليزي."
+            : "Microphone active. Say Start, What is ahead, or Arabic.",
+          true
+        );
+      } catch (e) {}
+    }
+
+    function stopMic() {
+      keepMicAlive = false;
+      isMicActive = false;
+      btnToggleMic.setAttribute("aria-pressed", "false");
+      btnToggleMic.classList.remove("mic-active-state");
+      btnMicText.textContent = UI_TEXT[settings.lang].btnMicStart;
+      micLiveCaption.classList.add("hidden");
+      if (recognition) {
+        try { recognition.stop(); } catch (e) {}
+      }
+    }
+
+    function handleVoiceCommand(cmd) {
+      if (cmd.includes("ابدأ") || cmd.includes("ابدا") || cmd.includes("شغل") || cmd.includes("start")) {
+        if (!isRunning && aiModel) startCamera();
+        else speakCurrentStatusNow();
+      } else if (cmd.includes("توقف") || cmd.includes("وقف") || cmd.includes("stop")) {
+        if (isRunning) stopCamera();
+      } else if (cmd.includes("انجليزي") || cmd.includes("إنجليزي") || cmd.includes("english")) {
+        settings.lang = "en";
+        applySettingsToUI();
+        speak("Switched to English.", true, "en");
+      } else if (cmd.includes("عربي") || cmd.includes("العربية") || cmd.includes("arabic")) {
+        settings.lang = "ar";
+        applySettingsToUI();
+        speak("تم التحويل إلى اللغة العربية.", true, "ar");
+      } else if (cmd.includes("قدامي") || cmd.includes("امامي") || cmd.includes("مسافة") || cmd.includes("ahead")) {
+        speakCurrentStatusNow();
+      } else if (cmd.includes("اعدادات") || cmd.includes("إعدادات") || cmd.includes("settings")) {
+        openSettingsModal();
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 10. النوافذ المنبثقة وربط الأحداث
+     * ============================================================================
+     */
+    function openSettingsModal() {
+      unlockAudio();
+      settingsModal.classList.remove("hidden");
+      speak(
+        settings.lang === "ar" ? "لوحة إعدادات إمكانية الوصول." : "Accessibility settings opened.",
+        true
+      );
+    }
+
+    function closeSettingsModal() {
+      settingsModal.classList.add("hidden");
+      speak(settings.lang === "ar" ? "تم حفظ الإعدادات." : "Settings saved.", true);
+    }
+
+    function showAlertModal(title, message) {
+      alertModalTitle.textContent = title;
+      alertModalBody.textContent = message;
+      alertModal.classList.remove("hidden");
+      speak(`${title}. ${message}`, true);
+    }
